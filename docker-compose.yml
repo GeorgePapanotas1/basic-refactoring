@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./:/app
+    working_dir: /app
+    tty: true
+    init: true
+    environment:
+      - COMPOSER_ALLOW_SUPERUSER=1
+    # Example of running a one-off command:
+    # docker compose run --rm app php -v
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: '${DOCKER_SERVICES_NAME:-my-app}-php-cli'
+    volumes:
+      - ./:/app
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    command: php -S 0.0.0.0:8080 -t public public/index.php
+    environment:
+      - COMPOSER_ALLOW_SUPERUSER=1
+    init: true

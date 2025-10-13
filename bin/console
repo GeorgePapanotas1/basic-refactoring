@@ -1,0 +1,39 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Command\Command;
+
+// Load Composer autoload (which also loads src/bootstrap.php to handle .env)
+require __DIR__ . '/../vendor/autoload.php';
+
+// Determine project root and commands directory
+$root = dirname(__DIR__);
+$commandsDir = $root . '/src/Console/Commands';
+
+// Recursively require all PHP files under src/Console/Commands to make their classes available
+$iter = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($commandsDir, FilesystemIterator::SKIP_DOTS | FilesystemIterator::CURRENT_AS_FILEINFO)
+);
+/** @var SplFileInfo $file */
+foreach ($iter as $file) {
+    if ($file->isFile() && $file->getExtension() === 'php') {
+        require_once $file->getPathname();
+    }
+}
+
+$application = new Application($_ENV['APP_NAME'] ?? getenv('APP_NAME') ?: 'App Console', 'dev');
+
+// Auto-register commands: any class under App\Console\Commands that extends Symfony Command
+foreach (get_declared_classes() as $class) {
+    if (str_starts_with($class, 'App\\Console\\Commands\\') && is_subclass_of($class, Command::class)) {
+        // Instantiate without constructor args (conventional for console commands)
+        $application->add(new $class());
+    }
+}
+
+// Run the console application
+$exitCode = $application->run();
+exit($exitCode);
