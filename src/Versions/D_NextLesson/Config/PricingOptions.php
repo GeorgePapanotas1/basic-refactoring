@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Versions\D_NoConfigArrays\Config;
+namespace App\Versions\D_NextLesson\Config;
 
-use App\Versions\D_NoConfigArrays\Enums\RoundingModes;
+use App\Versions\D_NextLesson\Enums\RoundingModes;
 
 class PricingOptions
 {

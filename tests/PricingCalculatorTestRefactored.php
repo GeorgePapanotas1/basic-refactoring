@@ -4,25 +4,20 @@ declare(strict_types=1);
 
 namespace App\Tests;
 
-use App\Contracts\IPriceCalculator;
-use App\Services\PricingCalculator;
-use App\Versions\A_EarlyReturns\PricingCalculator as EarlyReturnsPricingCalculator;
-use App\Versions\B_NoMagicValues\PricingCalculator as NoMagicValuesPricingCalculator;
-use App\Versions\C_Functions\PricingCalculator as FunctionsPricingCalculator;
+use App\Versions\D_NextLesson\Config\PricingOptions;
+use App\Versions\D_NextLesson\Enums\RoundingModes;
+use App\Versions\D_NextLesson\PricingCalculator as NoConfigArraysPricingCalculator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-final class PricingCalculatorTest extends TestCase
+final class PricingCalculatorTestRefactored extends TestCase
 {
-    private IPriceCalculator $sut;
+    private NoConfigArraysPricingCalculator $sut;
 
 
     protected function setUp(): void
     {
-//        $this->sut = new PricingCalculator();
-//        $this->sut = new EarlyReturnsPricingCalculator();
-//        $this->sut = new NoMagicValuesPricingCalculator();
-        $this->sut = new FunctionsPricingCalculator();
+        $this->sut = new NoConfigArraysPricingCalculator();
     }
 
     public static function provideBasicDiscounts(): array
@@ -40,13 +35,13 @@ final class PricingCalculatorTest extends TestCase
     #[DataProvider('provideBasicDiscounts')]
     public function test_basic_discounts_with_default_tax_and_rounding(string $customerType, float $amount, float $expected): void
     {
-        $this->assertEqualsWithDelta($expected, $this->sut->priceFor($customerType, $amount), 0.00001);
+        $this->assertEqualsWithDelta($expected, $this->sut->priceFor($customerType, $amount, null), 0.00001);
     }
 
     public function test_partner_discount_cannot_go_below_zero(): void
     {
         // partner 10 -> max(0, 10-15) = 0; tax -> 0
-        $this->assertEqualsWithDelta(0.0, $this->sut->priceFor('partner', 10.0), 0.00001);
+        $this->assertEqualsWithDelta(0.0, $this->sut->priceFor('partner', 10.0, null), 0.00001);
     }
 
     public function test_max_discount_cap_applies(): void
@@ -54,35 +49,50 @@ final class PricingCalculatorTest extends TestCase
         // vip 200 -> 20% off = 160 (discount 40), but cap maxDiscount=30 => min final discount is 30
         // code uses max(amount - maxDiscount, discounted) => max(170, 160) = 170
         // tax 24% => 170 * 1.24 = 210.8
-        $price = $this->sut->priceFor('vip', 200.0, ['maxDiscount' => 30.0]);
+
+        $pricingOptions = PricingOptions::withDefaults()
+                                        ->setMaxDiscount(30);
+        $price = $this->sut->priceFor('vip', 200.0, $pricingOptions);
         $this->assertEqualsWithDelta(210.80, $price, 0.00001);
     }
 
     public function test_custom_tax_rate_overrides_default(): void
     {
         // other 100, tax 10% => 110.00
-        $price = $this->sut->priceFor('other', 100.0, ['taxRate' => 0.10]);
+        $pricingOptions = PricingOptions::withDefaults()
+                                        ->setTaxRate(0.10);
+
+        $price = $this->sut->priceFor('other', 100.0, $pricingOptions);
         $this->assertEqualsWithDelta(110.00, $price, 0.00001);
     }
 
     public function test_another_custom_tax_rate_overrides_default(): void
     {
         // other 100, tax 12% => 112.00
-        $price = $this->sut->priceFor('other', 100.0, ['tax_rate' => 0.12]);
+
+        $pricingOptions = PricingOptions::withDefaults()
+                                        ->setTaxRate(0.12);
+        $price = $this->sut->priceFor('other', 100.0, $pricingOptions);
         $this->assertEqualsWithDelta(112.0, $price, 0.00001);
     }
 
     public function test_rounding_floor_mode(): void
     {
         // other 99 -> 99 * 1.24 = 122.76 -> floor => 122
-        $price = $this->sut->priceFor('other', 99.0, ['rounding' => 'floor']);
+
+        $pricingOptions = PricingOptions::withDefaults()
+                                        ->setRoundingMode(RoundingModes::FLOOR);
+
+        $price = $this->sut->priceFor('other', 99.0, $pricingOptions);
         $this->assertSame(122.0, $price);
     }
 
     public function test_rounding_ceil_mode(): void
     {
         // other 99 -> 99 * 1.24 = 122.76 -> ceil => 123
-        $price = $this->sut->priceFor('other', 99.0, ['rounding' => 'ceil']);
+        $pricingOptions = PricingOptions::withDefaults()
+                                        ->setRoundingMode(RoundingModes::CEIL);
+        $price = $this->sut->priceFor('other', 99.0, $pricingOptions);
         $this->assertSame(123.0, $price);
     }
 
@@ -90,14 +100,14 @@ final class PricingCalculatorTest extends TestCase
     {
         // choose a case that produces more than 2 decimals before rounding
         // amount 19.99, other: no discount; 19.99 * 1.24 = 24.7876 -> 24.79
-        $price = $this->sut->priceFor('other', 19.99);
+        $price = $this->sut->priceFor('other', 19.99, null);
         $this->assertEqualsWithDelta(24.79, $price, 0.00001);
     }
 
     #[DataProvider('provideCustomerTypes')]
     public function test_zero_amount_returns_zero_for_all_customer_types(string $customerType): void
     {
-        $this->assertSame(0.0, $this->sut->priceFor($customerType, 0.0));
+        $this->assertSame(0.0, $this->sut->priceFor($customerType, 0.0, null));
     }
 
     public static function provideCustomerTypes(): array
@@ -113,17 +123,23 @@ final class PricingCalculatorTest extends TestCase
     public function test_zero_amount_ignores_rounding_options(): void
     {
         // Even with rounding modes, zero should short-circuit and remain zero
-        $this->assertSame(0.0, $this->sut->priceFor('other', 0.0, ['rounding' => 'floor']));
-        $this->assertSame(0.0, $this->sut->priceFor('vip', 0.0, ['rounding' => 'ceil']));
+        $pricingOptionsFloor = PricingOptions::withDefaults()
+                                        ->setRoundingMode(RoundingModes::FLOOR);
+
+        $pricingOptionsCeil = PricingOptions::withDefaults()
+                                        ->setRoundingMode(RoundingModes::CEIL);
+        $this->assertSame(0.0, $this->sut->priceFor('other', 0.0, $pricingOptionsFloor));
+        $this->assertSame(0.0, $this->sut->priceFor('vip', 0.0, $pricingOptionsCeil));
     }
 
     public function test_zero_amount_ignores_tax_and_max_discount_options(): void
     {
         // Changing taxRate or maxDiscount must not affect zero amounts
-        $this->assertSame(0.0, $this->sut->priceFor('partner', 0.0, [
-            'taxRate' => 0.50,
-            'maxDiscount' => 999.0,
-        ]));
+        $pricingOptions = PricingOptions::withDefaults()
+                                            ->setMaxDiscount(999.0)
+                                            ->setTaxRate(0.50);
+
+        $this->assertSame(0.0, $this->sut->priceFor('partner', 0.0, $pricingOptions));
     }
 
     public function test_tiny_non_zero_amount_goes_through_pipeline_with_ceil(): void
@@ -131,7 +147,10 @@ final class PricingCalculatorTest extends TestCase
         // For a tiny amount, the early return must NOT trigger (since amount !== 0.0),
         // and with rounding=ceil we expect 1.0 after tax.
         // amount = 0.0001, no discount, tax 24% => 0.000124; ceil => 1.0
-        $price = $this->sut->priceFor('other', 0.0001, ['rounding' => 'ceil']);
+        $pricingOptionsCeil = PricingOptions::withDefaults()
+                                            ->setRoundingMode(RoundingModes::CEIL);
+
+        $price = $this->sut->priceFor('other', 0.0001, $pricingOptionsCeil);
         $this->assertSame(1.0, $price);
     }
 }

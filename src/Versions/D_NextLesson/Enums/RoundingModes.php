@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Versions\D_NoConfigArrays\Enums;
+namespace App\Versions\D_NextLesson\Enums;
 
 enum RoundingModes: string
 {

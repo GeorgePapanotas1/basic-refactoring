@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Versions\D_NoConfigArrays;
+namespace App\Versions\D_NextLesson;
 
 use App\Contracts\IPriceCalculator;
-use App\Versions\D_NoConfigArrays\Config\PricingOptions;
+use App\Versions\D_NextLesson\Config\PricingOptions;
 
-class PricingCalculator implements IPriceCalculator
+class PricingCalculator
 {
 
     private const VIP_RATE = 0.20;
@@ -16,7 +16,7 @@ class PricingCalculator implements IPriceCalculator
     private const ROUND_CEIL  = 'ceil';
     private const ROUND_STD   = 'round';
 
-    public function priceFor(string $customerType, float $amount, PricingOptions $options): float
+    public function priceFor(string $customerType, float $amount, ?PricingOptions $options): float
     {
 
         if ($amount === 0.0) {
@@ -24,11 +24,11 @@ class PricingCalculator implements IPriceCalculator
         }
         $discounted = $this->applyBaseDiscount($customerType, $amount);
 
-        $discounted = $this->applyCap($amount, $discounted, $options['maxDiscount'] ?? null);
+        $discounted = $this->applyCap($amount, $discounted, $options->maxDiscount ?? null);
 
-        $withTax = $this->applyTax($discounted, $options['taxRate'] ?? null);
+        $withTax = $this->applyTax($discounted, $options->taxRate ?? null);
 
-        return $this->applyRounding($withTax, $options['rounding'] ?? null);
+        return $this->applyRounding($withTax, $options->roundingMode->value ?? null);
     }
 
     private function applyBaseDiscount(string $customerType, float $amount): float
